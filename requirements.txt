@@ -1,0 +1,13 @@
+akshare
+duckdb
+duckdb-engine
+sqlmodel
+alembic
+scikit-learn
+torch
+backtrader
+hvplot
+wxauto
+apscheduler
+panel
+pytest
