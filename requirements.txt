@@ -11,3 +11,4 @@ wxauto
 apscheduler
 panel
 pytest
+pyarrow

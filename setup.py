@@ -8,8 +8,14 @@ setup(
     author="Your Name",  # 请替换成您的名字
     author_email="your.email@example.com",  # 请替换成您的邮箱
     install_requires=[
-        # 读取 requirements.txt 文件中的依赖
-        # 实际项目中，更复杂的依赖管理可能会用到其他工具
+        "alembic",
+        "akshare",
+        "duckdb",
+        "duckdb-engine",
+        "pandas",
+        "sqlmodel",
+        "tqdm",
+        "pyarrow",
     ],
     entry_points={
         "console_scripts": [
@@ -17,4 +23,5 @@ setup(
             "autostock_worker=autostock.main:main",
         ],
     },
+    python_requires=">=3.9",
 )

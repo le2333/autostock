@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+from sqlmodel import SQLModel
 
 # =========== START: Manual DuckDB Support for Alembic ===========
 from alembic.ddl.impl import DefaultImpl
@@ -23,9 +24,9 @@ class AlembicDuckDBImpl(DefaultImpl):
 # This allows Alembic to find our models
 sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
 
-# Import our models so Alembic can see them
-from autostock.database.models import *
-from sqlmodel import SQLModel
+# Import all models here so that Alembic's autogenerate can detect them
+from autostock.database.models import market
+from autostock.database.models import tracking
 
 # Import the engine directly from our project
 from autostock.database.engine import engine
@@ -64,7 +65,7 @@ def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
-        target_metadata=target_metadata,
+        target_metadata=SQLModel.metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -80,10 +81,8 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    # Use the engine from our project directly
-    # This avoids all issues with relative paths and configurations
     with engine.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(connection=connection, target_metadata=SQLModel.metadata)
 
         with context.begin_transaction():
             context.run_migrations()
