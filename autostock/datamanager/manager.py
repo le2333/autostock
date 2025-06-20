@@ -1,5 +1,8 @@
 import logging
 from pathlib import Path
+import pandas as pd
+from datetime import date
+import shutil
 
 # 强制日志配置，必须在其他库（如akshare）导入前执行
 # 将sqlalchemy的日志级别设置为WARNING，以减少不必要的输出
@@ -21,6 +24,8 @@ from autostock.datamanager.fetcher import AkshareFetcher
 from autostock.datamanager.cleaner import DataCleaner
 from autostock.datamanager.ops import market_ops, daily_ops, tracking_ops
 from autostock.datamanager.session import get_session
+from sqlmodel import select, func, delete
+from autostock.database.models import DataTracking, MarketOverview
 
 
 class DataManager:
@@ -127,15 +132,98 @@ class DataManager:
         print(f"Found {len(symbols)} tracked stocks.")
         return symbols
 
+    def select_stocks(self, **kwargs) -> pd.DataFrame:
+        """
+        根据基本面数据筛选股票。
+        :param kwargs: 过滤条件，如 industry='银行', status='上市'
+        :return: 符合条件的股票DataFrame
+        """
+        print(f"Selecting stocks with criteria: {kwargs}...")
+        with get_session() as session:
+            selected_df = self.market_ops.query_market_overview(session, **kwargs)
+        print(f"Found {len(selected_df)} stocks matching criteria.")
+        return selected_df
+
+    def get_daily_history(
+        self, symbol: str, start_date: date | None = None, end_date: date | None = None
+    ) -> pd.DataFrame:
+        """
+        获取指定股票、指定时间范围的日线历史数据。
+        数据源为本地Parquet文件。
+
+        :param symbol: 股票代码。
+        :param start_date: 开始日期。
+        :param end_date: 结束日期。
+        :return: 包含日线数据的DataFrame。
+        """
+        print(f"Getting daily history for {symbol} from {start_date} to {end_date}...")
+        return self.daily_ops.read_daily_from_parquet(
+            symbol, self.data_path, start_date, end_date
+        )
+
 
 if __name__ == "__main__":
-    # 日志配置已在文件顶部完成
+    # 配置日志
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
 
-    # 这个部分可以作为一个简单的测试入口，直接运行此文件即可更新数据
     manager = DataManager()
 
-    # 步骤1: 更新市场股票列表
-    manager.sync_market_overview()
+    # --- Clean Slate Setup ---
+    print("INFO: Preparing a clean test environment...")
+
+    # 1. 清空旧的数据文件
+    daily_data_dir = manager.data_path / "daily"
+    if daily_data_dir.exists():
+        print(f"INFO: Removing old data directory: {daily_data_dir}")
+        shutil.rmtree(daily_data_dir)
+
+    # 2. 重置并填充数据库
+    with get_session() as session:
+        print("INFO: Resetting database tables...")
+        session.exec(delete(MarketOverview))
+        session.exec(delete(DataTracking))
+        session.commit()
+
+        print("INFO: Seeding with test data...")
+        session.add_all(
+            [
+                DataTracking(symbol="sh600519", name="贵州茅台"),
+                DataTracking(symbol="sz000001", name="平安银行"),
+                DataTracking(symbol="sz300750", name="宁德时代"),
+            ]
+        )
+        session.add_all(
+            [
+                MarketOverview(
+                    symbol="sh600519",
+                    name="贵州茅台",
+                    industry="酿酒行业",
+                    market_type="主板",
+                    status="上市",
+                ),
+                MarketOverview(
+                    symbol="sz000001",
+                    name="平安银行",
+                    industry="银行",
+                    market_type="主板",
+                    status="上市",
+                ),
+                MarketOverview(
+                    symbol="sz300750",
+                    name="宁德时代",
+                    industry="电池",
+                    market_type="创业板",
+                    status="上市",
+                ),
+            ]
+        )
+        session.commit()
+        print("INFO: Test data seeded.")
+    # --- End of Clean Slate Setup ---
+
+    # 步骤1: 同步市场股票列表 (数据量大，网络开销高，建议仅在需要时取消注释运行)
+    # manager.sync_market_overview()
 
     # 步骤2: 获取当前跟踪的股票列表
     all_stocks = manager.get_stock_list()
@@ -148,3 +236,24 @@ if __name__ == "__main__":
         manager.sync_daily_history(codes=codes_to_sync)
     else:
         print("\nNo stocks to sync. Run `sync_market_overview` first.")
+
+    # 步骤4: 为确保有数据可读，我们先为一只股票同步日线数据
+    print(
+        "\n[DEMO] Syncing daily data for 'sz000001' to ensure data exists for reading..."
+    )
+    manager.sync_daily_history(codes=["sz000001"])
+
+    # 步骤5: 按基本面条件筛选股票
+    print("\n[DEMO] Selecting stocks from '银行' industry...")
+    bank_stocks = manager.select_stocks(industry="银行")
+    print("Selected bank stocks:")
+    print(bank_stocks)
+
+    # 步骤6: 获取指定股票、指定时间段的行情数据
+    print("\n[DEMO] Getting daily history for 'sz000001' for year 2023...")
+    history_df = manager.get_daily_history(
+        symbol="sz000001", start_date=date(2023, 1, 1), end_date=date(2023, 12, 31)
+    )
+    print("Sample of fetched history data:")
+    print(history_df.head())
+    print(history_df.tail())

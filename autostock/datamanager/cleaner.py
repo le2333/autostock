@@ -146,16 +146,33 @@ class DataCleaner:
         :param df: 原始DataFrame
         :return: 清洗后的DataFrame
         """
-        # 定义列名映射关系
+        # 重命名列
         rename_map = {
             "代码": "symbol",
             "名称": "name",
+            "行业": "industry",
+            "板块": "market_type",
+            "上市日期": "list_date",
+            "上市状态": "status",
             "最新价": "last_price",
-            "涨跌幅": "change_pct",
-            "市盈率-动态": "pe_ratio",
-            "总市值": "total_market_cap",
         }
-        df = df.rename(columns=rename_map)
+
+        # 只重命名DataFrame中实际存在的列
+        df.rename(
+            columns={k: v for k, v in rename_map.items() if k in df.columns},
+            inplace=True,
+        )
+
+        # 增加一个更新时间戳
+        df["updated_at"] = pd.Timestamp.now()
+
+        # --- 安全地处理可选列 ---
+        # 转换日期和时间戳
+        if "list_date" in df.columns:
+            df["list_date"] = pd.to_datetime(df["list_date"], errors="coerce").dt.date
+
+        if "updated_at" in df.columns:
+            df["updated_at"] = pd.to_datetime(df["updated_at"])
 
         # 标准化股票代码 (e.g., 600000 -> sh600000)
         def standardize_symbol(symbol: str) -> str:
@@ -174,10 +191,12 @@ class DataCleaner:
         required_columns = [
             "symbol",
             "name",
+            "industry",
+            "market_type",
+            "list_date",
+            "status",
             "last_price",
-            "change_pct",
-            "pe_ratio",
-            "total_market_cap",
+            "updated_at",
         ]
         df = df[required_columns]
 
@@ -188,10 +207,6 @@ class DataCleaner:
         df["last_price"] = pd.to_numeric(df["last_price"], errors="coerce")
         df["change_pct"] = pd.to_numeric(df["change_pct"], errors="coerce")
         df["total_market_cap"] = pd.to_numeric(df["total_market_cap"], errors="coerce")
-
-        # 转换日期和时间戳
-        df["list_date"] = pd.to_datetime(df["list_date"], errors="coerce").dt.date
-        df["updated_at"] = pd.to_datetime(df["updated_at"])
 
         # 筛选出最终需要的列，并保证顺序与模型一致
         final_cols = [
@@ -223,7 +238,7 @@ class DataCleaner:
 
         # 重命名列
         rename_map = {
-            "日期": "date",
+            "日期": "trade_date",
             "开盘": "open",
             "收盘": "close",
             "最高": "high",
@@ -238,7 +253,7 @@ class DataCleaner:
         df["symbol"] = symbol
 
         # 类型转换
-        df["date"] = pd.to_datetime(df["date"]).dt.date
+        df["trade_date"] = pd.to_datetime(df["trade_date"]).dt.date
         numeric_cols = [
             "open",
             "close",
@@ -253,7 +268,7 @@ class DataCleaner:
 
         # 筛选最终列
         final_cols = [
-            "date",
+            "trade_date",
             "symbol",
             "open",
             "close",

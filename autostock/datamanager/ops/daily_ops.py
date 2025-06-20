@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import date
 import pandas as pd
 
 # 定义数据存储的根目录
@@ -49,3 +50,42 @@ def read_daily_data(symbol: str) -> pd.DataFrame | None:
     except Exception as e:
         print(f"ERROR: Failed to read daily data for {symbol}. Error: {e}")
         return None
+
+
+def read_daily_from_parquet(
+    symbol: str,
+    data_path: Path,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> pd.DataFrame:
+    """
+    从Parquet文件中读取单只股票的日线历史数据，并可选择按日期范围筛选。
+
+    :param symbol: 股票代码。
+    :param data_path: 数据存储的根目录。
+    :param start_date: 筛选的开始日期。
+    :param end_date: 筛选的结束日期。
+    :return: 包含日线数据的DataFrame。
+    """
+    daily_data_path = data_path / "daily"
+    file_path = daily_data_path / f"{symbol}.parquet"
+
+    if not file_path.exists():
+        print(f"WARN: Data file not found for {symbol} at {file_path}")
+        return pd.DataFrame()
+
+    df = pd.read_parquet(file_path)
+
+    # 如果从文件读取的DataFrame为空，直接返回，避免KeyError
+    if df.empty:
+        return df
+
+    # 确保 'trade_date' 列是 datetime 类型以便比较
+    df["trade_date"] = pd.to_datetime(df["trade_date"]).dt.date
+
+    if start_date:
+        df = df[df["trade_date"] >= start_date]
+    if end_date:
+        df = df[df["trade_date"] <= end_date]
+
+    return df

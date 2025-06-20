@@ -35,3 +35,26 @@ def get_all_market_overview() -> pd.DataFrame:
             return pd.DataFrame()
         # 将结果转换为字典列表，然后创建DataFrame
         return pd.DataFrame([r.model_dump() for r in results])
+
+
+def query_market_overview(session: Session, **kwargs) -> pd.DataFrame:
+    """
+    根据指定条件从数据库查询市场总览数据。
+    支持基于模型字段的动态过滤。
+
+    :param session: 数据库会话。
+    :param kwargs: 过滤条件，键为字段名，值为期望值。
+    :return: 包含查询结果的DataFrame。
+    """
+    statement = select(MarketOverview)
+    for key, value in kwargs.items():
+        if hasattr(MarketOverview, key):
+            statement = statement.where(getattr(MarketOverview, key) == value)
+        else:
+            print(f"WARN: Invalid filter key '{key}' ignored.")
+
+    results = session.exec(statement).all()
+    if not results:
+        return pd.DataFrame()
+
+    return pd.DataFrame([r.model_dump() for r in results])
